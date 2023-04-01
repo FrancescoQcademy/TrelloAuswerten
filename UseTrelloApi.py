@@ -98,6 +98,7 @@ class TrelloAPI:
         return custom_fields
 
     def get_all_done_cards_from_a_board(self):
+
         # select team and board to work with
         print("Teams:")
         i = 0
@@ -133,20 +134,15 @@ class TrelloAPI:
         cards = []
 
         # collect cards on all boards, that have a defined label
-        for board in self.boards:
-            URL = f"https://api.trello.com/1/boards/{board}/cards?fields=name,dateLastActivity,shortUrl,labels&customFieldItems=true"
-            query = {
-                'key': self.key,
-                'token': self.token
-            }
-            response = requests.get(URL, headers=self.headers, params=query)
-            cards_in_board = json.loads(response.text)
-            for card in cards_in_board:
-                for card_label in card['labels']:
-                    if card_label['name'] == label:
-                        cards.append(card)
+        URL = f"https://api.trello.com/1/search?query=label:{label}&cards=all&card_fields=name,dateLastActivity,shortUrl,labels&customFieldItems=true"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.get(URL, headers=self.headers, params=query)
+        cards_in_board = json.loads(response.text)['cards']
 
-        return cards
+        return cards_in_board
 
 
     #print cards with label
@@ -162,28 +158,36 @@ class TrelloAPI:
         print("")
 
     def run(self):
-        self.get_boards_and_organizations_i_have_access_to()
-        self.collect_user_boards_of_all_organizations_i_have_access_to()
-
 
         #select function to execute
-        #either 1) get all done cards from a board or 2) get all cards from all boards with label "veröffentlichen"
+        #either
+        # 1) get all done cards from a board or
+        # 2) get all cards from all boards with label "veröffentlichen"
+        # 3) get all cards from all boards with label "refine"
+        # 4) exit
         #also have a option to exit the program
-        #repeat until user selects option 3
+        #repeat until user selects exit
         while True:
+
+            self.get_boards_and_organizations_i_have_access_to()
+            self.collect_user_boards_of_all_organizations_i_have_access_to()
+
             print("---- Qcademy Trello Cockpit - V0.1 ---")
             print("Select function to execute:")
 
             print("1) Get all done cards from a board")
             print("2) Get all cards from all boards with label \"veröffentlichen\"")
-            print("3) Exit")
+            print("3) Get all cards from all boards with label \"refine\"")
+            print("4) Exit")
             function = int(input("Select function: "))
             if function == 1:
                 self.get_all_done_cards_from_a_board()
             elif function == 2:
                 self.print_cards_with_label("veröffentlichen")
             elif function == 3:
-                return
+                self.print_cards_with_label("refine")
+            elif function == 4:
+                exit(0)
             else:
                 print("Invalid input")
                 return
