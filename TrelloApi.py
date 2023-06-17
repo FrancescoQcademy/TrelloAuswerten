@@ -3,6 +3,8 @@ import re
 import requests
 import json
 import os
+import colorama
+from colorama import Fore, Back, Style
 # get necessary import for strptime
 from datetime import datetime
 
@@ -416,6 +418,18 @@ class TrelloAPI:
                     print("0")
         print(f"Sum of efforts: {sum_efforts}")
 
+
+    #get all lists of a board
+    def get_all_lists(self, board_id):
+        URL = f"https://api.trello.com/1/boards/{board_id}/lists"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.request("GET", URL, headers=self.headers, params=query)
+        lists = json.loads(response.text)
+        return lists
+
     #for a board, return all cards - return only fields: card name, card id, card url
     def get_all_cards(self, board_id):
         URL = f"https://api.trello.com/1/boards/{board_id}/cards?fields=name,id,shortUrl"
@@ -439,10 +453,13 @@ class TrelloAPI:
         board_id = localBoards[int(input("Select board: "))]
         return board_id
 
-    def add_checkpoint_to_all_cards_in_board(self, board_id, checkpoint_name):
+    def add_checkpoint_to_all_cards_in_board(self, board_id, checklist_name, checkpoint_name):
         cards = self.get_all_cards(board_id)
+        i = 0
         for card in cards:
-            self.add_checkpoint_to_card_if_not_present(card['id'], "Acceptance Criteria", checkpoint_name)
+            print (f"{i} Adding checkpoint to card {card['name']} .. ", end="")
+            self.add_checkpoint_to_card_if_not_present(card['id'], checklist_name, checkpoint_name)
+            i = i + 1
 
     def add_checkpoint_to_card(self, checklist_id, check_item_name):
         URL = f"https://api.trello.com/1/checklists/{checklist_id}/checkItems"
@@ -453,10 +470,13 @@ class TrelloAPI:
         }
         response = requests.request("POST", URL, headers=self.headers, params=query)
         if response.status_code != 200:
-            print(f"Error adding checklist to card {card_id}")
-            return
+            print(Fore.RED+f"Error adding checklist to card {card_id}"+Fore.RESET)
+            return False
+        print(Fore.GREEN+f"Checkpoint added"+Fore.RESET)
+        return True
 
     def add_checkpoint_to_card_if_not_present(self, card_id, checklist_name, check_item_name):
+        done = False
         checklists = self.get_checklists_for_card_id(card_id, check_item_name)
         for checklist in checklists:
             if checklist_name != checklist['name']:
@@ -465,11 +485,13 @@ class TrelloAPI:
             # extract all checklist items names as new list
             name_list = [item['name'] for item in checklist['checkItems']]
             if check_item_name in name_list:
-                print(f"Checkpoint {check_item_name} already exists in card {card_id}")
+                print(Fore.BLUE+f"Checkpoint already exists"+Fore.RESET)
+                return
             else:
                 self.add_checkpoint_to_card(checklist['id'], check_item_name)
-                print(card_id, end="\r")
-
+                done = True
+        if not done:
+            print (Fore.LIGHTRED_EX+"Checklist not found"+Fore.RESET)
 
     def get_checklists_for_card_id(self, card_id, check_item_name):
         URL = f"https://api.trello.com/1/cards/{card_id}/checklists"
@@ -525,17 +547,11 @@ class TrelloAPI:
             elif function == 5:
                 self.get_all_cards_from_one_board_and_calculate_efforts()
             elif function == 6:
-                self.add_checkpoint_to_all_cards_in_board(self.select_board(), "Fill out Feedback Form https://forms.gle/g4BR8kehcamNowHw9")
+                self.add_checkpoint_to_all_cards_in_board(self.select_board(), "Acceptance Criteria", "Fill out Feedback Form https://forms.gle/g4BR8kehcamNowHw9")
             elif function == 0:
                 exit(0)
             else:
                 print("Invalid input")
-            return
-
-
-
-
-
 
 
 if __name__ == "__main__":
