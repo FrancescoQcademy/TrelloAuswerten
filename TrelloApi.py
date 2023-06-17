@@ -1,3 +1,4 @@
+import math
 import re
 import requests
 import json
@@ -27,6 +28,35 @@ class TrelloAPI:
         response_dict = json.loads(response.text)
         self.organization_ids = response_dict['idOrganizations']
         self.boards = response_dict['idBoards']
+        return self.boards
+
+    #return all boards of the user with information on board name and id
+    def get_boards_i_have_access_to(self):
+        url = "https://api.trello.com/1/members/me"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.get(url, headers=self.headers, params=query)
+        response_dict = json.loads(response.text)
+        self.boards = response_dict['idBoards']
+        return self.boards
+
+    # retrun a dictionary with board names and ideas based on self.boards
+    def get_board_names_and_ids(self):
+
+        url = "https://getflowshare.com/de/preisgestaltung/?utm_medium=referral&utm_source=flowshare&utm_campaign=settings-de"
+        boards = {}
+        for board in self.boards:
+            url = f"https://api.trello.com/1/boards/{board}"
+            query = {
+                'key': self.key,
+                'token': self.token
+            }
+            response = requests.get(url, headers=self.headers, params=query)
+            response_dict = json.loads(response.text)
+            boards[response_dict['name']] = response_dict['id']
+        return boards
 
     # gets all organizations of the user and filters them for "team" AND deletes all boards that have "bewerbungen",
     # "backlog" or "pinnwand" in the name
@@ -123,8 +153,9 @@ class TrelloAPI:
     def get_all_cards_from_all_boards_with_effort(self):
 
         effort_data = []
+        cards_with_same_name = {}
 
-        # iterate over all boards in all teams
+        # iterate over all boards in all teams and gather effort data
         for current_team in self.teams:
             for current_board in current_team['boards']:
                 # get all cards from the board
@@ -135,38 +166,56 @@ class TrelloAPI:
                     if 'sprint' in card['name'].lower():
                         continue
                     if card['customFieldItems'][0]['value']['number'] != "0":
-                        card['name'] = re.sub(r'\s*\([A-Za-z0-9\s]*\)|\s*\[[A-Za-z0-9\s]*\]', '', card['name'])
+                        card['name'] = self.clean_card_name(card['name'])
                         card_name = card['name']
-                        #print(f"{current_team['displayName']}; {current_board['name']}, {card_name}; {card['customFieldItems'][0]['value']['number']}")
-
                         #put the data into a evaluatable data structure
                         effort_data.append({
                             'team': current_team['displayName'],
                             'board': current_board['name'],
                             'card': card_name,
-                            'effort': card['customFieldItems'][0]['value']['number']
+                            'effort': card['customFieldItems'][0]['value']['number'],
                         })
-            #for all cards with the same name, calculate the average effort
-            #get all cards with the same name
-            cards_with_same_name = {}
+                if (len(effort_data) == 0):
+                    continue
+        #for all cards with the same name, calculate the average effort and the sample size
+        #get all cards with the same name
+
+        for card in effort_data:
+            if card['card'] in cards_with_same_name:
+                cards_with_same_name[card['card']].append(card)
+            else:
+                cards_with_same_name[card['card']] = [card]
+
+        #sort cards_with_same_name by card name
+        cards_with_same_name = dict(sorted(cards_with_same_name.items()))
+
+        #calculate average, standard deviation, median, min and max for all cards, group by card name
+        for card_name in cards_with_same_name:
+            effort_data = cards_with_same_name[card_name]
+
+            effort_sum = 0
+            sample_size = len(cards_with_same_name[card_name])
+            effort_list = []
+            if sample_size == 0:
+                continue
             for card in effort_data:
-                if card['card'] in cards_with_same_name:
-                    cards_with_same_name[card['card']].append(card)
-                else:
-                    cards_with_same_name[card['card']] = [card]
-            #calculate the average effort for all cards with the same name and print it sorted by card name
-            for card_name in sorted(cards_with_same_name):
-                effort_sum = 0
-                for card in cards_with_same_name[card_name]:
-                    effort_sum += float(card['effort'])
-                average_effort = effort_sum / len(cards_with_same_name[card_name])
-                print(f"{card_name}: {average_effort}")
+                effort_sum += float(card['effort'])
+                effort_list.append(float(card['effort']))
+                #sample_size += 1
+            average_effort = effort_sum / sample_size   #average
+            effort_list.sort()
+            median_effort = effort_list[int(sample_size/2)] #median
+            min_effort = effort_list[0] #min
+            max_effort = effort_list[-1] #max
+            effort_sum = 0
+            for effort in effort_list:
+                effort_sum += (effort - average_effort)**2
+            standard_deviation = math.sqrt(effort_sum / sample_size) #standard deviation
+            print(f"{card_name} Average: {average_effort}; Standard Deviation: {standard_deviation}; Median: {median_effort}; Min: {min_effort}; Max: {max_effort}")
 
-
-
-
-
-
+    def clean_card_name(self, card_name):
+        cleaned_card_name = re.sub(r'\s*\([A-Za-z0-9\s]*\)|\s*\[[A-Za-z0-9\s]*\]', '', card_name)
+        return cleaned_card_name
 
     def get_cards_including_custom_field_from_board(self, current_board_id :str) -> []:
         URL = f"https://api.trello.com/1/boards/{current_board_id}?fields=name&cards=visible&card_fields=name&customFields=true&card_customFieldItems=true"
@@ -191,6 +240,19 @@ class TrelloAPI:
                 else:
                     card['customFieldItems'].remove(custom_field)
         return cards;
+
+
+    def get_cards_from_board(self, current_board_id :str) -> []:
+        URL = f"https://api.trello.com/1/boards/{current_board_id}?fields=name&cards=visible&card_fields=name&customFields=true&card_customFieldItems=true"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.request("GET", URL, headers=self.headers, params=query)
+        if response.status_code != 200:
+            return {}
+        board = json.loads(response.text)
+        return board['cards']
 
     # define a function to get cards from all boards, that have a custom field and calculate the average for all cards with names that are alike
     def get_all_cards_from_all_boards_with_effort_backup(self):
@@ -296,6 +358,133 @@ class TrelloAPI:
         print("----------------------------------------------------------------------------------------------------------------------------")
         print("")
 
+
+    # rename a card, return success status and new name of card, as well as the link to the card
+    def rename_card(self, card_id, new_name):
+        URL = f"https://api.trello.com/1/cards/{card_id}?name={new_name}"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.request("PUT", URL, headers=self.headers, params=query)
+        card = json.loads(response.text)
+        return card['name'] == new_name, card['name'], card['shortUrl']
+
+    def get_all_cards_from_one_board_and_calculate_efforts(self):
+        # select team and board to work with
+        print("Teams:")
+        i = 0
+        for team in self.teams:
+            print(f"{team['displayName']} ({i})")
+            i += 1
+        team = self.teams[int(input("Select team: "))]
+        self.boards = team['boards']
+
+        self.find_done_lists()
+        i = 0
+        for board_name in self.done_lists:
+            print(f"{board_name} ({i})")
+            i += 1
+        board_name = list(self.done_lists.keys())[int(input("Select board: "))]
+        board_id = self.done_lists[board_name]
+        liste = self.done_lists[board_name]
+        print("")
+        URL = f"https://api.trello.com/1/lists/{liste}/cards?fields=name,dateLastActivity&customFieldItems=true"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.request("GET", URL, headers=self.headers, params=query)
+        cards = json.loads(response.text)
+        sum_efforts = 0.0
+        for card in cards:
+            if card['customFieldItems'] == [] or \
+                    'sprint' in card['name'].lower():
+                continue
+            # print the card name and the date of the last activity in one line
+            print(card['name'], end=";")
+            print(card['dateLastActivity'], end=";")
+            # get the custom fields for the card
+            custom_fields = self.get_custom_fields_for_card(card['id'])
+            if custom_fields == {}:
+                print("0")
+            for custom_field in custom_fields:
+                if custom_field['value']['number'] != None:
+                    print(custom_field['value']['number'])
+                    sum_efforts += float(custom_field['value']['number'])
+                else:
+                    print("0")
+        print(f"Sum of efforts: {sum_efforts}")
+
+    #for a board, return all cards - return only fields: card name, card id, card url
+    def get_all_cards(self, board_id):
+        URL = f"https://api.trello.com/1/boards/{board_id}/cards?fields=name,id,shortUrl"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.request("GET", URL, headers=self.headers, params=query)
+        cards = json.loads(response.text)
+        return cards
+
+    def select_board(self):
+        i = 0
+        localBoards = []
+        for team in self.teams:
+            print(f"----------{team['displayName']} ----------")
+            for board in team['boards']:
+                print(f"{board['name']} ({i})")
+                localBoards.append(board['id'])
+                i += 1
+        board_id = localBoards[int(input("Select board: "))]
+        return board_id
+
+    def add_checkpoint_to_all_cards_in_board(self, board_id, checkpoint_name):
+        cards = self.get_all_cards(board_id)
+        for card in cards:
+            self.add_checkpoint_to_card_if_not_present(card['id'], "Acceptance Criteria", checkpoint_name)
+
+    def add_checkpoint_to_card(self, checklist_id, check_item_name):
+        URL = f"https://api.trello.com/1/checklists/{checklist_id}/checkItems"
+        query = {
+            'key': self.key,
+            'token': self.token,
+            'name': check_item_name
+        }
+        response = requests.request("POST", URL, headers=self.headers, params=query)
+        if response.status_code != 200:
+            print(f"Error adding checklist to card {card_id}")
+            return
+
+    def add_checkpoint_to_card_if_not_present(self, card_id, checklist_name, check_item_name):
+        checklists = self.get_checklists_for_card_id(card_id, check_item_name)
+        for checklist in checklists:
+            if checklist_name != checklist['name']:
+                continue
+            # check if checklist item already exists
+            # extract all checklist items names as new list
+            name_list = [item['name'] for item in checklist['checkItems']]
+            if check_item_name in name_list:
+                print(f"Checkpoint {check_item_name} already exists in card {card_id}")
+            else:
+                self.add_checkpoint_to_card(checklist['id'], check_item_name)
+                print(card_id, end="\r")
+
+
+    def get_checklists_for_card_id(self, card_id, check_item_name):
+        URL = f"https://api.trello.com/1/cards/{card_id}/checklists"
+        query = {
+            'key': self.key,
+            'token': self.token,
+            'name': check_item_name
+        }
+        response = requests.request("GET", URL, headers=self.headers, params=query)
+        if response.status_code != 200:
+            print(f"Error getting checklists for card {card_id}")
+            return []
+        checklists = json.loads(response.text)
+        return checklists
+
     def run(self):
 
         #select function to execute
@@ -304,7 +493,9 @@ class TrelloAPI:
         # 2) get all cards from all boards with label "veröffentlichen"
         # 3) get all cards from all boards with label "refine"
         # 4) get all cards from all boards with a custom field - use the function get_all_cards_from_all_boards_with_custom_field
-        # 5) exit
+        # 5) get all cards from one named board and calculate efforts
+        # 6) add a specific checkpoint to all cards in a board, if not yet present
+        # 0) exit
         #also have a option to exit the program
         #repeat until user selects exit
         while True:
@@ -318,8 +509,10 @@ class TrelloAPI:
             print("1) Get all done cards from a board")
             print("2) Get all cards from all boards with label \"veröffentlichen\"")
             print("3) Get all cards from all boards with label \"refine\"")
-            print("4) Get all cards from all boards with a custom field")
-            print("5) Exit")
+            print("4) Get cards Effort Data")
+            print("5) Get all cards from a board to sum efforts")
+            print("6) Add a checkpoint to all cards in a board")
+            print("0) Exit")
             function = int(input("Select function: "))
             if function == 1:
                 self.get_all_done_cards_from_a_board()
@@ -330,6 +523,10 @@ class TrelloAPI:
             elif function == 4:
                 self.get_all_cards_from_all_boards_with_effort()
             elif function == 5:
+                self.get_all_cards_from_one_board_and_calculate_efforts()
+            elif function == 6:
+                self.add_checkpoint_to_all_cards_in_board(self.select_board(), "Fill out Feedback Form https://forms.gle/g4BR8kehcamNowHw9")
+            elif function == 0:
                 exit(0)
             else:
                 print("Invalid input")
