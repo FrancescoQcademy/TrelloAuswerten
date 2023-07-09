@@ -124,6 +124,38 @@ class TrelloAPI:
                 if liste['name'] == "Done":
                     self.done_lists[board_dict['name']] = liste['id']
 
+    def find_item_in_named_list_for_board(self, list_name: str, board_id: str):
+        item_list = []
+        list_id = ""
+        URL = f"https://api.trello.com/1/boards/{board_id}" \
+              f"?fields=name,url,displayName&lists=open&list_fields=name"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        response = requests.get(URL, headers=self.headers, params=query)
+        board_dict = json.loads(response.text)
+        for liste in board_dict['lists']:
+            if liste['name'] == "list_name":
+                list_id = liste['id']
+        if list_id == "":
+            return []
+        URL = f"https://api.trello.com/1/lists/{list_id}/cards"
+        query = {
+            'key': self.key,
+            'token': self.token
+        }
+        try:
+            response = requests.get(URL, headers=self.headers, params=query)
+            cards = json.loads(response.text)
+            for card in cards:
+                item_list.append(card['name'])
+        except  Exception as e:
+            print(e)
+            return []
+        return item_list
+
+
     def get_custom_field_from_card(self, card_id: str, custom_field_id: str) -> {}:
         url = f"https://api.trello.com/1/cards/{card_id}/customFieldItems"
         query = {
@@ -517,6 +549,7 @@ class TrelloAPI:
         # 4) get all cards from all boards with a custom field - use the function get_all_cards_from_all_boards_with_custom_field
         # 5) get all cards from one named board and calculate efforts
         # 6) add a specific checkpoint to all cards in a board, if not yet present
+        # 7) get all cards from all boards in list "review" and list with assignees and short url
         # 0) exit
         #also have a option to exit the program
         #repeat until user selects exit
@@ -534,6 +567,7 @@ class TrelloAPI:
             print("4) Get cards Effort Data")
             print("5) Get all cards from a board to sum efforts")
             print("6) Add a checkpoint to all cards in a board")
+            print("7) Get all cards from all boards in list \"review\" and list with assignees and short url")
             print("0) Exit")
             function = int(input("Select function: "))
             if function == 1:
@@ -548,6 +582,8 @@ class TrelloAPI:
                 self.get_all_cards_from_one_board_and_calculate_efforts()
             elif function == 6:
                 self.add_checkpoint_to_all_cards_in_board(self.select_board(), "Acceptance Criteria", "Fill out Feedback Form https://forms.gle/g4BR8kehcamNowHw9")
+            elif function == 7:
+                self.print_cards_in_list("review", True)
             elif function == 0:
                 exit(0)
             else:

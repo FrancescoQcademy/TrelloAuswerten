@@ -27,7 +27,7 @@
 # the script will print the number of tickets that were not renamed
 # the script will print the name of the tickets that were not renamed
 
-import TrelloApi
+from TrelloApi import api
 import os
 import gspread
 
