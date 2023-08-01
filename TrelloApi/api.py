@@ -125,22 +125,23 @@ class TrelloAPI:
                     self.done_lists[board_dict['name']] = liste['id']
 
     def find_item_in_named_list_for_board(self, list_name: str, board_id: str):
-        item_list = []
+
         list_id = ""
-        URL = f"https://api.trello.com/1/boards/{board_id}" \
-              f"?fields=name,url,displayName&lists=open&list_fields=name"
+        URL = f"https://api.trello.com/1/boards/{board_id}/lists" \
+              f"?fields=name&filter=open"
         query = {
             'key': self.key,
             'token': self.token
         }
         response = requests.get(URL, headers=self.headers, params=query)
-        board_dict = json.loads(response.text)
-        for liste in board_dict['lists']:
-            if liste['name'] == "list_name":
+        lists = json.loads(response.text)
+        for liste in lists:
+            if liste['name'] == list_name:
                 list_id = liste['id']
+                break
         if list_id == "":
             return []
-        URL = f"https://api.trello.com/1/lists/{list_id}/cards"
+        URL = f"https://api.trello.com/1/lists/{list_id}/cards?fields=name,shortUrl"
         query = {
             'key': self.key,
             'token': self.token
@@ -148,12 +149,11 @@ class TrelloAPI:
         try:
             response = requests.get(URL, headers=self.headers, params=query)
             cards = json.loads(response.text)
-            for card in cards:
-                item_list.append(card['name'])
+            return cards
         except  Exception as e:
             print(e)
             return []
-        return item_list
+
 
 
     def get_custom_field_from_card(self, card_id: str, custom_field_id: str) -> {}:
@@ -222,7 +222,8 @@ class TrelloAPI:
 
         #sort cards_with_same_name by card name
         cards_with_same_name = dict(sorted(cards_with_same_name.items()))
-
+        # print header
+        print("Card Name;Average;Standard Deviation;Median;Min;Max")
         #calculate average, standard deviation, median, min and max for all cards, group by card name
         for card_name in cards_with_same_name:
             effort_data = cards_with_same_name[card_name]
@@ -245,7 +246,7 @@ class TrelloAPI:
             for effort in effort_list:
                 effort_sum += (effort - average_effort)**2
             standard_deviation = math.sqrt(effort_sum / sample_size) #standard deviation
-            print(f"{card_name} Average: {average_effort}; Standard Deviation: {standard_deviation}; Median: {median_effort}; Min: {min_effort}; Max: {max_effort}")
+            print(f"{card_name};{average_effort:.2f};{standard_deviation:.2f};{median_effort:.2f};{min_effort:.2f};{max_effort:.2f}")
 
     def clean_card_name(self, card_name):
         cleaned_card_name = re.sub(r'\s*\([A-Za-z0-9\s]*\)|\s*\[[A-Za-z0-9\s]*\]', '', card_name)
@@ -564,7 +565,7 @@ class TrelloAPI:
             print("1) Get all done cards from a board")
             print("2) Get all cards from all boards with label \"veröffentlichen\"")
             print("3) Get all cards from all boards with label \"refine\"")
-            print("4) Get cards Effort Data")
+            print("4) Get effort statistics")
             print("5) Get all cards from a board to sum efforts")
             print("6) Add a checkpoint to all cards in a board")
             print("7) Get all cards from all boards in list \"review\" and list with assignees and short url")
