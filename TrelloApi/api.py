@@ -223,7 +223,7 @@ class TrelloAPI:
         #sort cards_with_same_name by card name
         cards_with_same_name = dict(sorted(cards_with_same_name.items()))
         # print header
-        print("Card Name;Average;Standard Deviation;Median;Min;Max")
+        print("Card Name;Average;Standard Deviation;Median;Min;Max;Sample Size")
         #calculate average, standard deviation, median, min and max for all cards, group by card name
         for card_name in cards_with_same_name:
             effort_data = cards_with_same_name[card_name]
@@ -246,10 +246,17 @@ class TrelloAPI:
             for effort in effort_list:
                 effort_sum += (effort - average_effort)**2
             standard_deviation = math.sqrt(effort_sum / sample_size) #standard deviation
-            print(f"{card_name};{average_effort:.2f};{standard_deviation:.2f};{median_effort:.2f};{min_effort:.2f};{max_effort:.2f}")
+            print(f"{card_name};{average_effort:.2f};{standard_deviation:.2f};{median_effort:.2f};{min_effort:.2f};{max_effort:.2f};{sample_size:d}")
 
     def clean_card_name(self, card_name):
         cleaned_card_name = re.sub(r'\s*\([A-Za-z0-9\s]*\)|\s*\[[A-Za-z0-9\s]*\]', '', card_name)
+
+        #some card names contain trailing sprint numbers, remove them example: "Regular Expressions S10" must be "Regular Expressions"
+        cleaned_card_name = re.sub(r'\s*S[0-9]*$', '', cleaned_card_name)
+
+        #delete trailing spaces and leading spaces
+        cleaned_card_name = cleaned_card_name.strip()
+
         return cleaned_card_name
 
     def get_cards_including_custom_field_from_board(self, current_board_id :str) -> []:
