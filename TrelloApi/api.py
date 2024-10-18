@@ -246,7 +246,7 @@ class TrelloAPI:
             for effort in effort_list:
                 effort_sum += (effort - average_effort)**2
             standard_deviation = math.sqrt(effort_sum / sample_size) #standard deviation
-            print(f"{card_name};{average_effort:.2f};{standard_deviation:.2f};{median_effort:.2f};{min_effort:.2f};{max_effort:.2f};{sample_size:d}")
+            print(f"{card_name};{average_effort:.2f};{standard_deviation:.2f};{median_effort:.2f};{min_effort:.2f};{max_effort:.2f};{sample_size:d4}")
 
     def clean_card_name(self, card_name):
         cleaned_card_name = re.sub(r'\s*\([A-Za-z0-9\s]*\)|\s*\[[A-Za-z0-9\s]*\]', '', card_name)
